@@ -1,0 +1,179 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>🎤 Karaokê - Escolha sua Música</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { font-family: Arial, sans-serif; background: #1a1a1a; color: #fff; }
+        
+        .header {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            padding: 20px;
+            text-align: center;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.3);
+        }
+        
+        .search-box {
+            max-width: 600px;
+            margin: 20px auto;
+            padding: 0 20px;
+        }
+        
+        .search-box input {
+            width: 100%;
+            padding: 15px;
+            font-size: 16px;
+            border: none;
+            border-radius: 25px;
+            background: #2a2a2a;
+            color: #fff;
+            outline: none;
+        }
+        
+        .song-list {
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+        
+        .song-item {
+            background: #2a2a2a;
+            margin: 10px 0;
+            padding: 15px 20px;
+            border-radius: 10px;
+            cursor: pointer;
+            transition: all 0.3s;
+            display: flex;
+            align-items: center;
+            gap: 15px;
+        }
+        
+        .song-item:hover {
+            background: #3a3a3a;
+            transform: translateX(5px);
+        }
+        
+        .song-number {
+            background: #667eea;
+            color: white;
+            padding: 5px 12px;
+            border-radius: 20px;
+            font-weight: bold;
+            min-width: 50px;
+            text-align: center;
+        }
+        
+        .song-name {
+            flex: 1;
+            font-size: 16px;
+        }
+        
+        .add-btn {
+            background: #27ae60;
+            color: white;
+            border: none;
+            padding: 8px 20px;
+            border-radius: 20px;
+            cursor: pointer;
+            font-weight: bold;
+            transition: all 0.3s;
+        }
+        
+        .add-btn:hover {
+            background: #2ecc71;
+            transform: scale(1.05);
+        }
+        
+        .add-btn:disabled {
+            background: #555;
+            cursor: not-allowed;
+        }
+        
+        .count {
+            text-align: center;
+            color: #888;
+            margin: 10px 0;
+        }
+        
+        .notification {
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            background: #27ae60;
+            color: white;
+            padding: 15px 25px;
+            border-radius: 10px;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.3);
+            display: none;
+            animation: slideIn 0.3s;
+        }
+        
+        @keyframes slideIn {
+            from { transform: translateX(400px); }
+            to { transform: translateX(0); }
+        }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <h1>🎤 Karaokê</h1>
+        <p>Escolha sua música e adicione na fila!</p>
+    </div>
+    
+    <div class="search-box">
+        <input type="text" id="searchInput" placeholder="🔍 Buscar por artista ou música...">
+    </div>
+    
+    <div class="count" id="songCount"></div>
+    
+    <div class="song-list" id="songList"></div>
+    
+    <div class="notification" id="notification">✓ Música adicionada na fila!</div>
+    
+    <script>
+        let allSongs = [];
+        
+        async function loadSongs(query = '') {
+            const response = await fetch(`/api/songs?q=${encodeURIComponent(query)}`);
+            const songs = await response.json();
+            allSongs = songs;
+            displaySongs(songs);
+        }
+        
+        function displaySongs(songs) {
+            const list = document.getElementById('songList');
+            const count = document.getElementById('songCount');
+            
+            count.textContent = `${songs.length} música${songs.length !== 1 ? 's' : ''}`;
+            
+            list.innerHTML = songs.map((song, i) => `
+                <div class="song-item">
+                    <div class="song-number">${i + 1}</div>
+                    <div class="song-name">${song.replace('.mp4', '')}</div>
+                    <button class="add-btn" onclick="addToQueue('${song}')">+ Adicionar</button>
+                </div>
+            `).join('');
+        }
+        
+        async function addToQueue(song) {
+            await fetch('/api/queue/add', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ song })
+            });
+            
+            const notif = document.getElementById('notification');
+            notif.style.display = 'block';
+            setTimeout(() => notif.style.display = 'none', 2000);
+        }
+        
+        document.getElementById('searchInput').addEventListener('input', (e) => {
+            loadSongs(e.target.value);
+        });
+        
+        loadSongs();
+    </script>
+</body>
+</html>

@@ -1,0 +1,384 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>🎵 DJ - Controle de Karaokê</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { font-family: Arial, sans-serif; background: #0a0a0a; color: #fff; }
+        
+        .container {
+            display: flex;
+            height: 100vh;
+        }
+        
+        .sidebar {
+            width: 400px;
+            min-width: 200px;
+            max-width: 800px;
+            background: #1a1a1a;
+            padding: 20px;
+            overflow-y: auto;
+            border-right: 2px solid #333;
+            position: relative;
+        }
+        
+        .resizer {
+            position: absolute;
+            top: 0;
+            right: 0;
+            width: 8px;
+            height: 100%;
+            cursor: col-resize;
+            background: #333;
+            transition: background 0.2s;
+        }
+        
+        .resizer:hover {
+            background: #667eea;
+        }
+        
+        .sidebar h2 {
+            color: #667eea;
+            margin-bottom: 20px;
+        }
+        
+        .queue-item {
+            background: #2a2a2a;
+            padding: 15px;
+            margin: 10px 0;
+            border-radius: 8px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            gap: 10px;
+        }
+        
+        .queue-item.playing {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            animation: pulse 2s infinite;
+        }
+        
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.8; }
+        }
+        
+        .queue-item-name {
+            flex: 1;
+            font-size: 14px;
+        }
+        
+        .queue-item-actions button {
+            background: #e74c3c;
+            color: white;
+            border: none;
+            padding: 5px 10px;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 12px;
+        }
+        
+        .queue-item-actions button:hover {
+            background: #c0392b;
+        }
+        
+        .player-area {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            background: #000;
+        }
+        
+        .controls {
+            background: #1a1a1a;
+            padding: 20px;
+            display: flex;
+            gap: 10px;
+            justify-content: center;
+            flex-wrap: wrap;
+        }
+        
+        .btn {
+            padding: 12px 24px;
+            border: none;
+            border-radius: 8px;
+            cursor: pointer;
+            font-size: 16px;
+            font-weight: bold;
+            transition: all 0.3s;
+        }
+        
+        .btn-primary { background: #667eea; color: white; }
+        .btn-success { background: #27ae60; color: white; }
+        .btn-danger { background: #e74c3c; color: white; }
+        .btn-warning { background: #f39c12; color: white; }
+        
+        .btn:hover { opacity: 0.8; transform: scale(1.05); }
+        
+        .video-container {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            background: #000;
+        }
+        
+        video {
+            flex: 1;
+            width: 100%;
+            object-fit: contain;
+        }
+        
+        .player-controls {
+            background: #1a1a1a;
+            padding: 20px;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            gap: 20px;
+        }
+        
+        .player-btn {
+            background: #667eea;
+            color: white;
+            border: none;
+            width: 60px;
+            height: 60px;
+            border-radius: 50%;
+            cursor: pointer;
+            font-size: 24px;
+            transition: all 0.3s;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        
+        .player-btn:hover {
+            background: #764ba2;
+            transform: scale(1.1);
+        }
+        
+        .player-btn.large {
+            width: 80px;
+            height: 80px;
+            font-size: 32px;
+        }
+        
+        .empty-state {
+            text-align: center;
+            color: #666;
+            font-size: 24px;
+        }
+        
+        .now-playing {
+            background: #2a2a2a;
+            padding: 15px;
+            text-align: center;
+            font-size: 18px;
+            color: #667eea;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="sidebar" id="sidebar">
+            <div class="resizer" id="resizer"></div>
+            <h2>🎵 Fila de Músicas</h2>
+            <div id="queueList"></div>
+        </div>
+        
+        <div class="player-area">
+            <div class="now-playing" id="nowPlaying">Nenhuma música tocando</div>
+            
+            <div class="controls">
+                <button class="btn btn-success" onclick="playNext()">▶ Próxima</button>
+                <button class="btn btn-primary" onclick="toggleFullscreen()">⛶ Tela Cheia</button>
+                <button class="btn btn-warning" onclick="reloadQueue()">🔄 Atualizar</button>
+                <button class="btn btn-danger" onclick="clearQueue()">🗑️ Limpar Fila</button>
+            </div>
+            
+            <div class="video-container">
+                <video id="video"></video>
+                <div class="empty-state" id="emptyState">
+                    <p>🎤</p>
+                    <p>Aguardando músicas na fila...</p>
+                </div>
+                <div class="player-controls">
+                    <button class="player-btn" onclick="playPrevious()">⏮</button>
+                    <button class="player-btn large" onclick="togglePlay()">▶</button>
+                    <button class="player-btn" onclick="playNext()">⏭</button>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <script>
+        let queue = [];
+        let currentIndex = -1;
+        
+        async function loadQueue() {
+            const response = await fetch('/api/queue');
+            queue = await response.json();
+            displayQueue();
+            
+            if (currentIndex === -1 && queue.length > 0) {
+                playNext();
+            }
+        }
+        
+        function displayQueue() {
+            const list = document.getElementById('queueList');
+            
+            if (queue.length === 0) {
+                list.innerHTML = '<p style="color: #666; text-align: center;">Fila vazia</p>';
+                return;
+            }
+            
+            list.innerHTML = queue.map((item, i) => `
+                <div class="queue-item ${i === currentIndex ? 'playing' : ''}">
+                    <div class="queue-item-name">
+                        ${i === currentIndex ? '▶ ' : ''}${item.song.replace('.mp4', '')}
+                    </div>
+                    <div class="queue-item-actions">
+                        <button onclick="removeFromQueue(${i})">✕</button>
+                    </div>
+                </div>
+            `).join('');
+        }
+        
+        async function playNext() {
+            if (queue.length === 0) {
+                currentIndex = -1;
+                document.getElementById('video').style.display = 'none';
+                document.getElementById('emptyState').style.display = 'block';
+                document.getElementById('nowPlaying').textContent = 'Nenhuma música tocando';
+                updatePlayButton();
+                return;
+            }
+            
+            currentIndex++;
+            if (currentIndex >= queue.length) {
+                currentIndex = 0;
+            }
+            
+            playSong();
+        }
+        
+        function playPrevious() {
+            if (queue.length === 0) return;
+            
+            currentIndex--;
+            if (currentIndex < 0) {
+                currentIndex = queue.length - 1;
+            }
+            
+            playSong();
+        }
+        
+        function playSong() {
+            const song = queue[currentIndex].song;
+            const video = document.getElementById('video');
+            const nowPlaying = document.getElementById('nowPlaying');
+            
+            video.src = `/video/${encodeURIComponent(song)}`;
+            video.style.display = 'block';
+            document.getElementById('emptyState').style.display = 'none';
+            nowPlaying.textContent = `🎵 Tocando: ${song.replace('.mp4', '')}`;
+            
+            video.play();
+            displayQueue();
+            updatePlayButton();
+        }
+        
+        function togglePlay() {
+            const video = document.getElementById('video');
+            if (video.paused) {
+                video.play();
+            } else {
+                video.pause();
+            }
+        }
+        
+        function updatePlayButton() {
+            const video = document.getElementById('video');
+            const btn = document.querySelector('.player-btn.large');
+            if (btn) {
+                btn.textContent = video.paused ? '▶' : '⏸';
+            }
+        }
+        
+        async function removeFromQueue(idx) {
+            await fetch(`/api/queue/remove/${idx}`, { method: 'DELETE' });
+            
+            if (idx < currentIndex) {
+                currentIndex--;
+            } else if (idx === currentIndex) {
+                currentIndex--;
+                playNext();
+            }
+            
+            loadQueue();
+        }
+        
+        async function clearQueue() {
+            if (confirm('Limpar toda a fila?')) {
+                await fetch('/api/queue/clear', { method: 'POST' });
+                currentIndex = -1;
+                loadQueue();
+                document.getElementById('video').pause();
+                document.getElementById('video').src = '';
+            }
+        }
+        
+        function toggleFullscreen() {
+            const video = document.getElementById('video');
+            if (video.requestFullscreen) {
+                video.requestFullscreen();
+            } else if (video.webkitRequestFullscreen) {
+                video.webkitRequestFullscreen();
+            }
+        }
+        
+        function reloadQueue() {
+            loadQueue();
+        }
+        
+        document.getElementById('video').addEventListener('ended', () => {
+            playNext();
+        });
+        
+        document.getElementById('video').addEventListener('play', updatePlayButton);
+        document.getElementById('video').addEventListener('pause', updatePlayButton);
+        
+        // Auto-reload queue a cada 5 segundos
+        setInterval(loadQueue, 5000);
+        
+        // Resizer
+        const resizer = document.getElementById('resizer');
+        const sidebar = document.getElementById('sidebar');
+        let isResizing = false;
+        
+        resizer.addEventListener('mousedown', (e) => {
+            isResizing = true;
+            document.body.style.cursor = 'col-resize';
+        });
+        
+        document.addEventListener('mousemove', (e) => {
+            if (!isResizing) return;
+            
+            const newWidth = e.clientX;
+            if (newWidth >= 200 && newWidth <= 800) {
+                sidebar.style.width = newWidth + 'px';
+            }
+        });
+        
+        document.addEventListener('mouseup', () => {
+            isResizing = false;
+            document.body.style.cursor = 'default';
+        });
+        
+        loadQueue();
+    </script>
+</body>
+</html>
