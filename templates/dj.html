@@ -128,6 +128,10 @@
             flex: 1;
             width: 100%;
             object-fit: contain;
+            background: #000;
+            /* Importante para iOS */
+            -webkit-playsinline: true;
+            playsinline: true;
         }
         
         .player-controls {
@@ -199,7 +203,7 @@
             </div>
             
             <div class="video-container">
-                <video id="video"></video>
+                <video id="video" playsinline webkit-playsinline></video>
                 <div class="empty-state" id="emptyState">
                     <p>🎤</p>
                     <p>Aguardando músicas na fila...</p>
@@ -281,12 +285,30 @@
             const video = document.getElementById('video');
             const nowPlaying = document.getElementById('nowPlaying');
             
+            // Pausar e limpar antes de trocar (importante para iOS)
+            video.pause();
+            video.removeAttribute('src');
+            video.load();
+            
+            // Definir nova fonte
             video.src = `/video/${encodeURIComponent(song)}`;
             video.style.display = 'block';
             document.getElementById('emptyState').style.display = 'none';
             nowPlaying.textContent = `🎵 Tocando: ${song.replace('.mp4', '')}`;
             
-            video.play();
+            // Forçar load e play (iOS precisa disso)
+            video.load();
+            
+            // Usar promise para garantir que play funcione
+            const playPromise = video.play();
+            if (playPromise !== undefined) {
+                playPromise.catch(error => {
+                    console.log('Erro ao tocar:', error);
+                    // Tentar novamente após um delay
+                    setTimeout(() => video.play(), 100);
+                });
+            }
+            
             displayQueue();
             updatePlayButton();
         }
@@ -294,10 +316,16 @@
         function togglePlay() {
             const video = document.getElementById('video');
             if (video.paused) {
-                video.play();
+                const playPromise = video.play();
+                if (playPromise !== undefined) {
+                    playPromise.catch(error => {
+                        console.log('Erro ao tocar:', error);
+                    });
+                }
             } else {
                 video.pause();
             }
+            updatePlayButton();
         }
         
         function updatePlayButton() {
@@ -348,8 +376,22 @@
             playNext();
         });
         
-        document.getElementById('video').addEventListener('play', updatePlayButton);
-        document.getElementById('video').addEventListener('pause', updatePlayButton);
+        document.getElementById('video').addEventListener('play', () => {
+            updatePlayButton();
+        });
+        
+        document.getElementById('video').addEventListener('pause', () => {
+            updatePlayButton();
+        });
+        
+        // Prevenir que iOS pause automaticamente
+        document.getElementById('video').addEventListener('loadedmetadata', () => {
+            console.log('Vídeo carregado');
+        });
+        
+        document.getElementById('video').addEventListener('canplay', () => {
+            console.log('Vídeo pronto para tocar');
+        });
         
         // Auto-reload queue a cada 5 segundos
         setInterval(loadQueue, 5000);
