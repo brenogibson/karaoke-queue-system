@@ -9,7 +9,7 @@ from karaoke_agent import process_song_request
 app = Flask(__name__)
 app.config['SEND_FILE_MAX_AGE_DEFAULT'] = 0
 app.config['TEMPLATES_AUTO_RELOAD'] = True
-KARAOKE_DIR = "/media/breno/External/Karaoke"
+KARAOKE_DIR = os.getenv('KARAOKE_DIR', '/home/breno/Karaoke')
 QUEUE_FILE = "/tmp/karaoke_queue.json"
 
 def load_queue():

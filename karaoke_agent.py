@@ -4,7 +4,7 @@ import re
 import yt_dlp
 from pathlib import Path
 
-KARAOKE_DIR = "/media/breno/External/Karaoke"
+KARAOKE_DIR = os.getenv('KARAOKE_DIR', '/home/breno/Karaoke')
 
 # Carregar variáveis de ambiente do .env se existir
 env_file = Path(__file__).parent / ".env"
