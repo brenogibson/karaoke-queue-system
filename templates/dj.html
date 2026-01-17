@@ -305,45 +305,70 @@
             const video = document.getElementById('video');
             const nowPlaying = document.getElementById('nowPlaying');
             
-            // Parar vídeo atual
-            video.pause();
+            console.log('🎵 Carregando:', song);
             
-            // Trocar source
+            // Parar completamente
+            video.pause();
+            video.removeAttribute('src');
+            video.load();
+            
+            // Aguardar um pouco
+            await new Promise(resolve => setTimeout(resolve, 100));
+            
+            // Configurar novo vídeo
             video.src = `/video/${encodeURIComponent(song)}`;
             video.style.display = 'block';
             document.getElementById('emptyState').style.display = 'none';
             nowPlaying.textContent = `🎵 Tocando: ${song.replace('.mp4', '')}`;
             
-            // Carregar e tocar
+            displayQueue();
+            
+            // Aguardar carregar
             video.load();
             
+            // Aguardar estar pronto
+            await new Promise((resolve) => {
+                video.oncanplay = resolve;
+                setTimeout(resolve, 2000); // timeout de segurança
+            });
+            
+            // Tocar
             try {
                 await video.play();
-                console.log('✓ Tocando:', song);
+                console.log('✓ Tocando');
+                updatePlayButton();
             } catch (error) {
                 console.error('✗ Erro ao tocar:', error);
+                updatePlayButton();
             }
-            
-            displayQueue();
-            updatePlayButton();
         }
         
         async function togglePlay() {
             const video = document.getElementById('video');
             
+            console.log('Toggle - paused:', video.paused, 'readyState:', video.readyState);
+            
             try {
                 if (video.paused) {
+                    if (video.readyState < 3) {
+                        console.log('Vídeo não está pronto, carregando...');
+                        video.load();
+                        await new Promise(resolve => {
+                            video.oncanplay = resolve;
+                            setTimeout(resolve, 2000);
+                        });
+                    }
                     await video.play();
                     console.log('✓ Play');
                 } else {
                     video.pause();
                     console.log('✓ Pause');
                 }
+                updatePlayButton();
             } catch (error) {
                 console.error('✗ Erro toggle:', error);
+                updatePlayButton();
             }
-            
-            updatePlayButton();
         }
         
         function updatePlayButton() {
@@ -394,24 +419,30 @@
         }
         
         document.getElementById('video').addEventListener('ended', () => {
+            console.log('Música terminou');
             playNext();
         });
         
         document.getElementById('video').addEventListener('play', () => {
+            console.log('Event: play');
             updatePlayButton();
         });
         
         document.getElementById('video').addEventListener('pause', () => {
+            console.log('Event: pause');
             updatePlayButton();
         });
         
-        // Prevenir que iOS pause automaticamente
         document.getElementById('video').addEventListener('loadedmetadata', () => {
-            console.log('Vídeo carregado');
+            console.log('Metadata carregada');
         });
         
         document.getElementById('video').addEventListener('canplay', () => {
-            console.log('Vídeo pronto para tocar');
+            console.log('Vídeo pronto (canplay)');
+        });
+        
+        document.getElementById('video').addEventListener('error', (e) => {
+            console.error('Erro no vídeo:', e);
         });
         
         // Auto-reload queue a cada 5 segundos
