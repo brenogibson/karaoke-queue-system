@@ -53,6 +53,12 @@
             justify-content: space-between;
             align-items: center;
             gap: 10px;
+            cursor: pointer;
+            transition: all 0.3s;
+        }
+        
+        .queue-item:hover {
+            background: #3a3a3a;
         }
         
         .queue-item.playing {
@@ -78,10 +84,16 @@
             border-radius: 5px;
             cursor: pointer;
             font-size: 12px;
+            z-index: 10;
         }
         
         .queue-item-actions button:hover {
             background: #c0392b;
+        }
+        
+        .queue-item-actions {
+            display: flex;
+            gap: 5px;
         }
         
         .player-area {
@@ -240,15 +252,22 @@
             }
             
             list.innerHTML = queue.map((item, i) => `
-                <div class="queue-item ${i === currentIndex ? 'playing' : ''}">
+                <div class="queue-item ${i === currentIndex ? 'playing' : ''}" onclick="playSongAt(${i})">
                     <div class="queue-item-name">
                         ${i === currentIndex ? '▶ ' : ''}${item.song.replace('.mp4', '')}
                     </div>
                     <div class="queue-item-actions">
-                        <button onclick="removeFromQueue(${i})">✕</button>
+                        <button onclick="event.stopPropagation(); removeFromQueue(${i})">✕</button>
                     </div>
                 </div>
             `).join('');
+        }
+        
+        function playSongAt(index) {
+            if (index >= 0 && index < queue.length) {
+                currentIndex = index;
+                playSong();
+            }
         }
         
         async function playNext() {
@@ -281,51 +300,55 @@
         }
         
         function playSong() {
+            if (!queue[currentIndex]) return;
+            
             const song = queue[currentIndex].song;
             const video = document.getElementById('video');
             const nowPlaying = document.getElementById('nowPlaying');
             
-            // Pausar e limpar antes de trocar (importante para iOS)
+            // Limpar completamente o vídeo anterior
             video.pause();
-            video.removeAttribute('src');
+            video.src = '';
             video.load();
             
-            // Definir nova fonte
-            video.src = `/video/${encodeURIComponent(song)}`;
-            video.style.display = 'block';
-            document.getElementById('emptyState').style.display = 'none';
-            nowPlaying.textContent = `🎵 Tocando: ${song.replace('.mp4', '')}`;
-            
-            // Forçar load e play (iOS precisa disso)
-            video.load();
-            
-            // Usar promise para garantir que play funcione
-            const playPromise = video.play();
-            if (playPromise !== undefined) {
-                playPromise.catch(error => {
-                    console.log('Erro ao tocar:', error);
-                    // Tentar novamente após um delay
-                    setTimeout(() => video.play(), 100);
+            // Pequeno delay para iOS processar
+            setTimeout(() => {
+                video.src = `/video/${encodeURIComponent(song)}`;
+                video.style.display = 'block';
+                document.getElementById('emptyState').style.display = 'none';
+                nowPlaying.textContent = `🎵 Tocando: ${song.replace('.mp4', '')}`;
+                
+                video.load();
+                
+                // Tentar tocar com tratamento de erro
+                video.play().then(() => {
+                    console.log('Tocando:', song);
+                }).catch(error => {
+                    console.error('Erro ao tocar:', error);
+                    // Retry após delay
+                    setTimeout(() => {
+                        video.play().catch(e => console.error('Retry falhou:', e));
+                    }, 500);
                 });
-            }
-            
-            displayQueue();
-            updatePlayButton();
+                
+                displayQueue();
+                updatePlayButton();
+            }, 100);
         }
         
         function togglePlay() {
             const video = document.getElementById('video');
+            
             if (video.paused) {
-                const playPromise = video.play();
-                if (playPromise !== undefined) {
-                    playPromise.catch(error => {
-                        console.log('Erro ao tocar:', error);
-                    });
-                }
+                video.play().then(() => {
+                    updatePlayButton();
+                }).catch(error => {
+                    console.error('Erro ao dar play:', error);
+                });
             } else {
                 video.pause();
+                updatePlayButton();
             }
-            updatePlayButton();
         }
         
         function updatePlayButton() {
