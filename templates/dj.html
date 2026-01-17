@@ -238,9 +238,8 @@
             queue = await response.json();
             displayQueue();
             
-            if (currentIndex === -1 && queue.length > 0) {
-                playNext();
-            }
+            // NÃO tocar automaticamente - iOS bloqueia
+            // Usuário precisa clicar para iniciar
         }
         
         function displayQueue() {
@@ -285,10 +284,10 @@
                 currentIndex = 0;
             }
             
-            playSong();
+            await playSong();
         }
         
-        function playPrevious() {
+        async function playPrevious() {
             if (queue.length === 0) return;
             
             currentIndex--;
@@ -296,59 +295,55 @@
                 currentIndex = queue.length - 1;
             }
             
-            playSong();
+            await playSong();
         }
         
-        function playSong() {
+        async function playSong() {
             if (!queue[currentIndex]) return;
             
             const song = queue[currentIndex].song;
             const video = document.getElementById('video');
             const nowPlaying = document.getElementById('nowPlaying');
             
-            // Limpar completamente o vídeo anterior
+            // Parar vídeo atual
             video.pause();
-            video.src = '';
+            
+            // Trocar source
+            video.src = `/video/${encodeURIComponent(song)}`;
+            video.style.display = 'block';
+            document.getElementById('emptyState').style.display = 'none';
+            nowPlaying.textContent = `🎵 Tocando: ${song.replace('.mp4', '')}`;
+            
+            // Carregar e tocar
             video.load();
             
-            // Pequeno delay para iOS processar
-            setTimeout(() => {
-                video.src = `/video/${encodeURIComponent(song)}`;
-                video.style.display = 'block';
-                document.getElementById('emptyState').style.display = 'none';
-                nowPlaying.textContent = `🎵 Tocando: ${song.replace('.mp4', '')}`;
-                
-                video.load();
-                
-                // Tentar tocar com tratamento de erro
-                video.play().then(() => {
-                    console.log('Tocando:', song);
-                }).catch(error => {
-                    console.error('Erro ao tocar:', error);
-                    // Retry após delay
-                    setTimeout(() => {
-                        video.play().catch(e => console.error('Retry falhou:', e));
-                    }, 500);
-                });
-                
-                displayQueue();
-                updatePlayButton();
-            }, 100);
+            try {
+                await video.play();
+                console.log('✓ Tocando:', song);
+            } catch (error) {
+                console.error('✗ Erro ao tocar:', error);
+            }
+            
+            displayQueue();
+            updatePlayButton();
         }
         
-        function togglePlay() {
+        async function togglePlay() {
             const video = document.getElementById('video');
             
-            if (video.paused) {
-                video.play().then(() => {
-                    updatePlayButton();
-                }).catch(error => {
-                    console.error('Erro ao dar play:', error);
-                });
-            } else {
-                video.pause();
-                updatePlayButton();
+            try {
+                if (video.paused) {
+                    await video.play();
+                    console.log('✓ Play');
+                } else {
+                    video.pause();
+                    console.log('✓ Pause');
+                }
+            } catch (error) {
+                console.error('✗ Erro toggle:', error);
             }
+            
+            updatePlayButton();
         }
         
         function updatePlayButton() {
@@ -365,8 +360,11 @@
             if (idx < currentIndex) {
                 currentIndex--;
             } else if (idx === currentIndex) {
-                currentIndex--;
-                playNext();
+                // Se remover a música atual, parar
+                const video = document.getElementById('video');
+                video.pause();
+                video.src = '';
+                currentIndex = -1;
             }
             
             loadQueue();
