@@ -1,1 +1,4 @@
-Flask==3.0.0
+Flask
+strands-agents
+youtube-search-python
+yt-dlp==3.0.0

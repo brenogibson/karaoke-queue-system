@@ -3,8 +3,12 @@ from flask import Flask, render_template, send_file, request, jsonify
 import os
 import json
 from datetime import datetime
+from threading import Thread
+from karaoke_agent import process_song_request
 
 app = Flask(__name__)
+app.config['SEND_FILE_MAX_AGE_DEFAULT'] = 0
+app.config['TEMPLATES_AUTO_RELOAD'] = True
 KARAOKE_DIR = "/media/breno/External/Karaoke"
 QUEUE_FILE = "/tmp/karaoke_queue.json"
 
@@ -66,6 +70,51 @@ def remove_from_queue(idx):
 def clear_queue():
     save_queue([])
     return jsonify({'success': True})
+
+@app.route('/api/queue/reorder', methods=['POST'])
+def reorder_queue():
+    data = request.json
+    from_idx = data.get('from')
+    to_idx = data.get('to')
+    
+    queue = load_queue()
+    if 0 <= from_idx < len(queue) and 0 <= to_idx < len(queue):
+        item = queue.pop(from_idx)
+        queue.insert(to_idx, item)
+        save_queue(queue)
+    
+    return jsonify({'success': True})
+
+@app.route('/api/request-song', methods=['POST'])
+def request_song():
+    data = request.json
+    query = data.get('query', '').strip()
+    
+    if not query:
+        return jsonify({'success': False, 'error': 'Query vazia'})
+    
+    # Processa em background para não travar a requisição
+    def download_async():
+        try:
+            print(f"[AGENT] Iniciando download para: {query}")
+            result = process_song_request(query)
+            print(f"[AGENT] Resultado: {result}")
+        except Exception as e:
+            print(f"[AGENT] ERRO: {e}")
+            import traceback
+            traceback.print_exc()
+    
+    Thread(target=download_async, daemon=True).start()
+    
+    return jsonify({'success': True, 'message': 'Processando pedido'})
+
+@app.route('/manifest.json')
+def manifest():
+    return send_file('manifest.json', mimetype='application/json')
+
+@app.route('/manifest-dj.json')
+def manifest_dj():
+    return send_file('manifest-dj.json', mimetype='application/json')
 
 @app.route('/video/<path:filename>')
 def video(filename):

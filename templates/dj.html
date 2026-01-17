@@ -2,7 +2,12 @@
 <html lang="pt-BR">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="apple-mobile-web-app-title" content="DJ Karaokê">
+    <link rel="apple-touch-icon" href="/static/icon-dj.png">
+    <link rel="manifest" href="/manifest-dj.json">
     <title>🎵 DJ - Controle de Karaokê</title>
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; }
@@ -53,12 +58,24 @@
             justify-content: space-between;
             align-items: center;
             gap: 10px;
-            cursor: pointer;
+            cursor: grab;
             transition: all 0.3s;
+        }
+        
+        .queue-item:active {
+            cursor: grabbing;
         }
         
         .queue-item:hover {
             background: #3a3a3a;
+        }
+        
+        .queue-item.dragging {
+            opacity: 0.5;
+        }
+        
+        .queue-item.drag-over {
+            border-top: 3px solid #667eea;
         }
         
         .queue-item.playing {
@@ -146,6 +163,10 @@
             playsinline: true;
         }
         
+        video.no-controls {
+            pointer-events: none;
+        }
+        
         .player-controls {
             background: #1a1a1a;
             padding: 20px;
@@ -153,6 +174,43 @@
             justify-content: center;
             align-items: center;
             gap: 20px;
+            flex-wrap: wrap;
+        }
+        
+        .volume-control {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            color: #667eea;
+        }
+        
+        .volume-slider {
+            width: 150px;
+            height: 6px;
+            -webkit-appearance: none;
+            appearance: none;
+            background: #333;
+            outline: none;
+            border-radius: 3px;
+        }
+        
+        .volume-slider::-webkit-slider-thumb {
+            -webkit-appearance: none;
+            appearance: none;
+            width: 18px;
+            height: 18px;
+            background: #667eea;
+            cursor: pointer;
+            border-radius: 50%;
+        }
+        
+        .volume-slider::-moz-range-thumb {
+            width: 18px;
+            height: 18px;
+            background: #667eea;
+            cursor: pointer;
+            border-radius: 50%;
+            border: none;
         }
         
         .player-btn {
@@ -224,6 +282,11 @@
                     <button class="player-btn" onclick="playPrevious()">⏮</button>
                     <button class="player-btn large" onclick="togglePlay()">▶</button>
                     <button class="player-btn" onclick="playNext()">⏭</button>
+                    <div class="volume-control">
+                        <span>🔊</span>
+                        <input type="range" class="volume-slider" id="volumeSlider" min="0" max="100" value="100" oninput="changeVolume(this.value)">
+                        <span id="volumeLabel">100%</span>
+                    </div>
                 </div>
             </div>
         </div>
@@ -251,7 +314,14 @@
             }
             
             list.innerHTML = queue.map((item, i) => `
-                <div class="queue-item ${i === currentIndex ? 'playing' : ''}" onclick="playSongAt(${i})">
+                <div class="queue-item ${i === currentIndex ? 'playing' : ''}" 
+                     draggable="true"
+                     data-index="${i}"
+                     ondragstart="handleDragStart(event, ${i})"
+                     ondragover="handleDragOver(event)"
+                     ondrop="handleDrop(event, ${i})"
+                     ondragend="handleDragEnd(event)"
+                     onclick="playSongAt(${i})">
                     <div class="queue-item-name">
                         ${i === currentIndex ? '▶ ' : ''}${item.song.replace('.mp4', '')}
                     </div>
@@ -418,6 +488,90 @@
             loadQueue();
         }
         
+        function changeVolume(value) {
+            const video = document.getElementById('video');
+            video.volume = value / 100;
+            document.getElementById('volumeLabel').textContent = value + '%';
+            
+            // Salvar preferência
+            localStorage.setItem('karaoke_volume', value);
+        }
+        
+        // Detectar iOS e esconder controle de volume
+        function isIOS() {
+            return /iPad|iPhone|iPod/.test(navigator.userAgent) || 
+                   (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+        }
+        
+        // Restaurar volume salvo
+        window.addEventListener('load', () => {
+            const video = document.getElementById('video');
+            
+            if (isIOS()) {
+                // No iOS: habilitar controles nativos do player
+                video.setAttribute('controls', '');
+                // Esconder controle de volume customizado
+                document.querySelector('.volume-control').style.display = 'none';
+            } else {
+                // No PC: desabilitar controles nativos e usar customizados
+                video.classList.add('no-controls');
+                const savedVolume = localStorage.getItem('karaoke_volume') || 100;
+                document.getElementById('volumeSlider').value = savedVolume;
+                changeVolume(savedVolume);
+            }
+        });
+        
+        // Drag and Drop
+        let draggedIndex = null;
+        
+        function handleDragStart(event, index) {
+            draggedIndex = index;
+            event.target.classList.add('dragging');
+            event.dataTransfer.effectAllowed = 'move';
+        }
+        
+        function handleDragOver(event) {
+            event.preventDefault();
+            event.dataTransfer.dropEffect = 'move';
+            event.currentTarget.classList.add('drag-over');
+        }
+        
+        function handleDrop(event, dropIndex) {
+            event.preventDefault();
+            event.currentTarget.classList.remove('drag-over');
+            
+            if (draggedIndex !== null && draggedIndex !== dropIndex) {
+                reorderQueue(draggedIndex, dropIndex);
+            }
+        }
+        
+        function handleDragEnd(event) {
+            event.target.classList.remove('dragging');
+            document.querySelectorAll('.queue-item').forEach(item => {
+                item.classList.remove('drag-over');
+            });
+            draggedIndex = null;
+        }
+        
+        async function reorderQueue(fromIdx, toIdx) {
+            await fetch('/api/queue/reorder', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ from: fromIdx, to: toIdx })
+            });
+            
+            // Ajustar currentIndex se necessário
+            if (currentIndex === fromIdx) {
+                currentIndex = toIdx;
+            } else if (fromIdx < currentIndex && toIdx >= currentIndex) {
+                currentIndex--;
+            } else if (fromIdx > currentIndex && toIdx <= currentIndex) {
+                currentIndex++;
+            }
+            
+            loadQueue();
+        }
+        
         document.getElementById('video').addEventListener('ended', () => {
             console.log('Música terminou');
             playNext();
@@ -453,6 +607,7 @@
         const sidebar = document.getElementById('sidebar');
         let isResizing = false;
         
+        // Mouse events (PC)
         resizer.addEventListener('mousedown', (e) => {
             isResizing = true;
             document.body.style.cursor = 'col-resize';
@@ -472,7 +627,33 @@
             document.body.style.cursor = 'default';
         });
         
+        // Touch events (iPad/Mobile)
+        resizer.addEventListener('touchstart', (e) => {
+            isResizing = true;
+            e.preventDefault();
+        });
+        
+        document.addEventListener('touchmove', (e) => {
+            if (!isResizing) return;
+            
+            const touch = e.touches[0];
+            const newWidth = touch.clientX;
+            if (newWidth >= 200 && newWidth <= 800) {
+                sidebar.style.width = newWidth + 'px';
+            }
+        });
+        
+        document.addEventListener('touchend', () => {
+            isResizing = false;
+        });
+        
         loadQueue();
+    </script>
+    <script>
+        // Registrar Service Worker para PWA
+        if ('serviceWorker' in navigator) {
+            navigator.serviceWorker.register('/static/sw.js').catch(() => {});
+        }
     </script>
 </body>
 </html>

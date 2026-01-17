@@ -42,6 +42,11 @@ Thumbs.db
 *.log
 karaoke.log
 
+# AWS Credentials
+.env
+.aws_credentials
+aws_credentials.json
+
 # Queue data
 karaoke_queue.json
 

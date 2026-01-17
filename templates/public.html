@@ -2,7 +2,12 @@
 <html lang="pt-BR">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="apple-mobile-web-app-title" content="Karaokê">
+    <link rel="apple-touch-icon" href="/static/icon.png">
+    <link rel="manifest" href="/manifest.json">
     <title>🎤 Karaokê - Escolha sua Música</title>
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; }
@@ -110,6 +115,33 @@
             animation: slideIn 0.3s;
         }
         
+        .request-box {
+            text-align: center;
+            padding: 40px 20px;
+        }
+        
+        .request-btn {
+            background: #e74c3c;
+            color: white;
+            border: none;
+            padding: 15px 30px;
+            border-radius: 25px;
+            cursor: pointer;
+            font-size: 16px;
+            font-weight: bold;
+            transition: all 0.3s;
+        }
+        
+        .request-btn:hover {
+            background: #c0392b;
+            transform: scale(1.05);
+        }
+        
+        .request-btn:disabled {
+            background: #555;
+            cursor: not-allowed;
+        }
+        
         @keyframes slideIn {
             from { transform: translateX(400px); }
             to { transform: translateX(0); }
@@ -134,27 +166,40 @@
     
     <script>
         let allSongs = [];
+        let currentQuery = '';
         
         async function loadSongs(query = '') {
+            currentQuery = query;
             const response = await fetch(`/api/songs?q=${encodeURIComponent(query)}`);
             const songs = await response.json();
             allSongs = songs;
-            displaySongs(songs);
+            displaySongs(songs, query);
         }
         
-        function displaySongs(songs) {
+        function displaySongs(songs, query) {
             const list = document.getElementById('songList');
             const count = document.getElementById('songCount');
             
             count.textContent = `${songs.length} música${songs.length !== 1 ? 's' : ''}`;
             
-            list.innerHTML = songs.map((song, i) => `
-                <div class="song-item">
-                    <div class="song-number">${i + 1}</div>
-                    <div class="song-name">${song.replace('.mp4', '')}</div>
-                    <button class="add-btn" onclick="addToQueue('${song}')">+ Adicionar</button>
-                </div>
-            `).join('');
+            if (songs.length === 0 && query.trim()) {
+                list.innerHTML = `
+                    <div class="request-box">
+                        <p style="margin-bottom: 20px; font-size: 18px;">Música não encontrada 😢</p>
+                        <button class="request-btn" onclick="requestSong('${query.replace(/'/g, "\\'")}')">
+                            🎵 Pedir para adicionar "${query}"
+                        </button>
+                    </div>
+                `;
+            } else {
+                list.innerHTML = songs.map((song, i) => `
+                    <div class="song-item">
+                        <div class="song-number">${i + 1}</div>
+                        <div class="song-name">${song.replace('.mp4', '')}</div>
+                        <button class="add-btn" onclick="addToQueue('${song}')">+ Adicionar</button>
+                    </div>
+                `).join('');
+            }
         }
         
         async function addToQueue(song) {
@@ -164,9 +209,43 @@
                 body: JSON.stringify({ song })
             });
             
+            showNotification('✓ Música adicionada na fila!');
+        }
+        
+        async function requestSong(query) {
+            const btn = event.target;
+            btn.disabled = true;
+            btn.textContent = '⏳ Processando...';
+            
+            try {
+                const response = await fetch('/api/request-song', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ query })
+                });
+                
+                const result = await response.json();
+                
+                if (result.success) {
+                    showNotification('✓ Música encontrada e baixando! Aguarde alguns minutos.');
+                    setTimeout(() => loadSongs(''), 3000);
+                } else {
+                    showNotification('❌ Erro: ' + result.error, '#e74c3c');
+                }
+            } catch (error) {
+                showNotification('❌ Erro ao processar pedido', '#e74c3c');
+            } finally {
+                btn.disabled = false;
+                btn.textContent = `🎵 Pedir para adicionar "${query}"`;
+            }
+        }
+        
+        function showNotification(message, color = '#27ae60') {
             const notif = document.getElementById('notification');
+            notif.textContent = message;
+            notif.style.background = color;
             notif.style.display = 'block';
-            setTimeout(() => notif.style.display = 'none', 2000);
+            setTimeout(() => notif.style.display = 'none', 3000);
         }
         
         document.getElementById('searchInput').addEventListener('input', (e) => {
@@ -174,6 +253,12 @@
         });
         
         loadSongs();
+    </script>
+    <script>
+        // Registrar Service Worker para PWA
+        if ('serviceWorker' in navigator) {
+            navigator.serviceWorker.register('/static/sw.js').catch(() => {});
+        }
     </script>
 </body>
 </html>

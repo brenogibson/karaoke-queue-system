@@ -1,0 +1,19 @@
+{
+  "name": "Karaokê Queue System",
+  "short_name": "Karaokê",
+  "description": "Sistema de fila de karaokê",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "background_color": "#1a1a1a",
+  "theme_color": "#667eea",
+  "orientation": "any",
+  "icons": [
+    {
+      "src": "/static/icon.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ]
+}

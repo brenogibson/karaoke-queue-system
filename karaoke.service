@@ -1,0 +1,16 @@
+[Unit]
+Description=Karaokê Queue System
+After=network.target
+
+[Service]
+Type=simple
+User=breno
+WorkingDirectory=/home/breno/karaoke-queue-system
+ExecStart=/usr/bin/python3 /home/breno/karaoke-queue-system/app.py
+Restart=always
+RestartSec=3
+StandardOutput=append:/tmp/karaoke.log
+StandardError=append:/tmp/karaoke.log
+
+[Install]
+WantedBy=multi-user.target
