@@ -34,13 +34,88 @@ else:
     print("[AGENT] Credenciais AWS não configuradas, usando modo direto")
 
 def format_song_name(query: str) -> str:
-    """Formata o nome da música para o padrão Artista - Música"""
+    """Formata o nome da música para o padrão Artista - Música usando LLM"""
     query = query.strip()
     
-    if " - " in query:
+    # Se já está no formato correto, retorna
+    if " - " in query and len(query.split(" - ")) == 2:
         parts = query.split(" - ", 1)
         return f"{parts[0].title()} - {parts[1].title()}"
     
+    prompt = f"""Dado o texto de busca de uma música: "{query}"
+
+Identifique o ARTISTA e o NOME DA MÚSICA.
+
+Responda APENAS no formato: Artista - Nome da Música
+
+Exemplos:
+- "abba dancing queen" → "ABBA - Dancing Queen"
+- "bohemian rhapsody queen" → "Queen - Bohemian Rhapsody"
+- "menudo nao se reprima" → "Menudo - Não Se Reprima"
+- "dancing queen" → "ABBA - Dancing Queen" (se souber o artista)
+
+Resposta:"""
+
+    # Tentar Bedrock primeiro (se credenciais AWS disponíveis)
+    if USE_STRANDS:
+        try:
+            import boto3
+            import json
+            
+            bedrock = boto3.client(
+                service_name='bedrock-runtime',
+                region_name=os.getenv('AWS_REGION', 'us-east-1')
+            )
+            
+            body = json.dumps({
+                "anthropic_version": "bedrock-2023-05-31",
+                "max_tokens": 100,
+                "temperature": 0.1,
+                "messages": [{"role": "user", "content": prompt}]
+            })
+            
+            response = bedrock.invoke_model(
+                modelId='anthropic.claude-3-haiku-20240307-v1:0',
+                body=body
+            )
+            
+            response_body = json.loads(response['body'].read())
+            formatted = response_body['content'][0]['text'].strip()
+            
+            if " - " in formatted and len(formatted.split(" - ")) == 2:
+                print(f"[BEDROCK] Formatado: {formatted}")
+                return formatted
+            else:
+                print(f"[BEDROCK] Resposta inválida, tentando Groq")
+        except Exception as e:
+            print(f"[BEDROCK] Erro: {e}, tentando Groq")
+    
+    # Tentar Groq como fallback
+    groq_key = os.getenv('GROQ_API_KEY')
+    if groq_key and groq_key != 'your_groq_api_key_here':
+        try:
+            from groq import Groq
+            client = Groq(api_key=groq_key)
+            
+            response = client.chat.completions.create(
+                model="llama-3.3-70b-versatile",
+                messages=[{"role": "user", "content": prompt}],
+                temperature=0.1,
+                max_tokens=50
+            )
+            
+            formatted = response.choices[0].message.content.strip()
+            
+            if " - " in formatted and len(formatted.split(" - ")) == 2:
+                print(f"[GROQ] Formatado: {formatted}")
+                return formatted
+            else:
+                print(f"[GROQ] Resposta inválida, usando fallback")
+        except Exception as e:
+            print(f"[GROQ] Erro: {e}, usando fallback")
+    
+    # Fallback: lógica simples
+    print(f"[FALLBACK] Usando formatação simples")
     words = query.split()
     if len(words) >= 2:
         mid = len(words) // 2

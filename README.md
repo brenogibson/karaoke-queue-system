@@ -106,11 +106,24 @@ karaoke-queue-system/
 
 Os vídeos ficam em: `/media/breno/External/Karaoke`
 
+### Pedir músicas que não existem
+
+O sistema baixa automaticamente do YouTube quando você busca uma música que não está na lista.
+
+**Formatação Inteligente de Nomes:**
+- ✅ **Com LLM** (Recomendado): Identifica corretamente artista e música
+  - Exemplo: "bohemian rhapsody queen" → "Queen - Bohemian Rhapsody"
+  - Configure seguindo `LLM_SETUP.md`
+- ⚠️ **Sem LLM** (Fallback): Divide a query ao meio
+  - Exemplo: "bohemian rhapsody queen" → "Bohemian - Rhapsody Queen" ❌
+
 ### Converter vídeos AV1 para H.264 (iOS)
 
 ```bash
 ~/convert_av1_to_h264.sh
 ```
+
+Conversão automática já está integrada no download!
 
 ## 🔧 Comandos Úteis
 
