@@ -29,7 +29,7 @@ if USE_STRANDS:
 else:
     print("[AGENT] Bedrock API Key não configurada, usando modo direto")
 
-def format_song_name(query: str) -> str:
+def format_song_name(query: str, youtube_title: str = None) -> str:
     """Formata o nome da música para o padrão Artista - Música usando LLM"""
     query = query.strip()
     
@@ -38,7 +38,23 @@ def format_song_name(query: str) -> str:
         parts = query.split(" - ", 1)
         return f"{parts[0].title()} - {parts[1].title()}"
     
-    prompt = f"""Dado o texto de busca de uma música: "{query}"
+    # Construir prompt com informações do YouTube se disponível
+    if youtube_title:
+        prompt = f"""Dado:
+- Busca do usuário: "{query}"
+- Título do vídeo no YouTube: "{youtube_title}"
+
+Identifique o ARTISTA e o NOME DA MÚSICA corretos.
+
+Responda APENAS no formato: Artista - Nome da Música
+
+Exemplos:
+- Busca: "as andorinhas trio" + YouTube: "Trio Parada Dura - As Andorinhas (Karaoke)" → "Trio Parada Dura - As Andorinhas"
+- Busca: "bohemian rhapsody queen" + YouTube: "Queen - Bohemian Rhapsody Karaoke" → "Queen - Bohemian Rhapsody"
+
+Resposta:"""
+    else:
+        prompt = f"""Dado o texto de busca de uma música: "{query}"
 
 Identifique o ARTISTA e o NOME DA MÚSICA.
 
@@ -47,8 +63,6 @@ Responda APENAS no formato: Artista - Nome da Música
 Exemplos:
 - "abba dancing queen" → "ABBA - Dancing Queen"
 - "bohemian rhapsody queen" → "Queen - Bohemian Rhapsody"
-- "menudo nao se reprima" → "Menudo - Não Se Reprima"
-- "dancing queen" → "ABBA - Dancing Queen" (se souber o artista)
 
 Resposta:"""
 
@@ -113,7 +127,22 @@ Resposta:"""
         except Exception as e:
             print(f"[GROQ] Erro: {e}, usando fallback")
     
-    # Fallback: lógica simples
+    # Fallback: tentar extrair do título do YouTube se disponível
+    if youtube_title:
+        print(f"[FALLBACK] Usando título do YouTube")
+        # Remover palavras comuns de karaoke
+        clean_title = youtube_title
+        for word in ['karaoke', 'instrumental', 'lyrics', '(', ')', '[', ']']:
+            clean_title = clean_title.replace(word, '').replace(word.upper(), '')
+        
+        clean_title = ' '.join(clean_title.split()).strip()
+        
+        # Se já tem " - ", usar
+        if " - " in clean_title:
+            parts = clean_title.split(" - ", 1)
+            return f"{parts[0].strip().title()} - {parts[1].strip().title()}"
+    
+    # Fallback final: lógica simples
     print(f"[FALLBACK] Usando formatação simples")
     words = query.split()
     if len(words) >= 2:
@@ -232,9 +261,9 @@ def download_karaoke_video(url: str, output_name: str) -> dict:
 # Modo Strands (com IA)
 if USE_STRANDS:
     @tool
-    def format_song_name_tool(query: str) -> str:
-        """Formata o nome da música para o padrão Artista - Música"""
-        return format_song_name(query)
+    def format_song_name_tool(query: str, youtube_title: str = "") -> str:
+        """Formata o nome da música para o padrão Artista - Música usando a query do usuário e o título do YouTube"""
+        return format_song_name(query, youtube_title if youtube_title else None)
     
     @tool
     def search_youtube_karaoke_tool(query: str) -> dict:
@@ -251,13 +280,18 @@ if USE_STRANDS:
         system_prompt="""Você é um assistente que baixa músicas de karaoke do YouTube.
 
 Seu trabalho:
-1. Receber o nome de uma música
-2. Formatar o nome para o padrão "Artista - Música"
-3. Buscar no YouTube a versão karaoke
-4. Baixar o vídeo com o nome formatado
+1. Receber o nome de uma música do usuário
+2. Buscar no YouTube a versão karaoke (use search_youtube_karaoke_tool)
+3. Usar o título do vídeo encontrado + query do usuário para formatar o nome (use format_song_name_tool passando AMBOS)
+4. Baixar o vídeo com o nome formatado (use download_karaoke_video_tool)
 
-Use as ferramentas na ordem correta.""",
-        tools=[format_song_name_tool, search_youtube_karaoke_tool, download_karaoke_video_tool]
+IMPORTANTE: 
+- Busque PRIMEIRO no YouTube para obter o título correto
+- Depois formate o nome usando a query do usuário E o título do YouTube
+- O título do YouTube geralmente tem o formato "Artista - Música (Karaoke)"
+
+Use as ferramentas NESTA ORDEM: search → format → download""",
+        tools=[search_youtube_karaoke_tool, format_song_name_tool, download_karaoke_video_tool]
     )
     
     def process_song_request(query: str) -> dict:
@@ -280,13 +314,19 @@ else:
         try:
             print(f"\n[AGENT] Processando: {query}")
             
-            formatted_name = format_song_name(query)
-            print(f"[AGENT] Nome formatado: {formatted_name}")
-            
+            # 1. Buscar no YouTube primeiro para obter o título
             search_result = search_youtube_karaoke(query)
             if "error" in search_result:
                 return {"success": False, "error": search_result["error"]}
             
+            youtube_title = search_result.get("title", "")
+            print(f"[AGENT] Título do YouTube: {youtube_title}")
+            
+            # 2. Formatar nome usando query + título do YouTube
+            formatted_name = format_song_name(query, youtube_title)
+            print(f"[AGENT] Nome formatado: {formatted_name}")
+            
+            # 3. Baixar vídeo
             download_result = download_karaoke_video(search_result["url"], formatted_name)
             if "error" in download_result:
                 return {"success": False, "error": download_result["error"]}
