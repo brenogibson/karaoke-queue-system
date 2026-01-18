@@ -17,11 +17,7 @@ if env_file.exists():
                 os.environ[key.strip()] = value.strip()
 
 # Verificar se deve usar Strands (se credenciais AWS estão disponíveis)
-USE_STRANDS = all([
-    os.getenv('AWS_ACCESS_KEY_ID'),
-    os.getenv('AWS_SECRET_ACCESS_KEY'),
-    os.getenv('AWS_REGION')
-])
+USE_STRANDS = bool(os.getenv('BEDROCK_API_KEY'))
 
 if USE_STRANDS:
     try:
@@ -31,7 +27,7 @@ if USE_STRANDS:
         USE_STRANDS = False
         print("[AGENT] Strands não disponível, usando modo direto")
 else:
-    print("[AGENT] Credenciais AWS não configuradas, usando modo direto")
+    print("[AGENT] Bedrock API Key não configurada, usando modo direto")
 
 def format_song_name(query: str) -> str:
     """Formata o nome da música para o padrão Artista - Música usando LLM"""
@@ -56,37 +52,40 @@ Exemplos:
 
 Resposta:"""
 
-    # Tentar Bedrock primeiro (se credenciais AWS disponíveis)
-    if USE_STRANDS:
+    # Tentar Bedrock primeiro (se Bedrock API Key disponível)
+    bedrock_key = os.getenv('BEDROCK_API_KEY')
+    if bedrock_key:
         try:
-            import boto3
-            import json
+            import requests
             
-            bedrock = boto3.client(
-                service_name='bedrock-runtime',
-                region_name=os.getenv('AWS_REGION', 'us-east-1')
-            )
+            region = os.getenv('AWS_REGION', 'us-east-1')
+            url = f"https://bedrock-runtime.{region}.amazonaws.com/model/anthropic.claude-3-haiku-20240307-v1:0/invoke"
             
-            body = json.dumps({
+            headers = {
+                'Authorization': f'Bearer {bedrock_key}',
+                'Content-Type': 'application/json'
+            }
+            
+            body = {
                 "anthropic_version": "bedrock-2023-05-31",
                 "max_tokens": 100,
                 "temperature": 0.1,
                 "messages": [{"role": "user", "content": prompt}]
-            })
+            }
             
-            response = bedrock.invoke_model(
-                modelId='anthropic.claude-3-haiku-20240307-v1:0',
-                body=body
-            )
+            response = requests.post(url, headers=headers, json=body, timeout=10)
             
-            response_body = json.loads(response['body'].read())
-            formatted = response_body['content'][0]['text'].strip()
-            
-            if " - " in formatted and len(formatted.split(" - ")) == 2:
-                print(f"[BEDROCK] Formatado: {formatted}")
-                return formatted
+            if response.status_code == 200:
+                result = response.json()
+                formatted = result['content'][0]['text'].strip()
+                
+                if " - " in formatted and len(formatted.split(" - ")) == 2:
+                    print(f"[BEDROCK] Formatado: {formatted}")
+                    return formatted
+                else:
+                    print(f"[BEDROCK] Resposta inválida, tentando Groq")
             else:
-                print(f"[BEDROCK] Resposta inválida, tentando Groq")
+                print(f"[BEDROCK] Erro HTTP {response.status_code}, tentando Groq")
         except Exception as e:
             print(f"[BEDROCK] Erro: {e}, tentando Groq")
     

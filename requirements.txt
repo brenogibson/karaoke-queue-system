@@ -2,4 +2,5 @@ Flask
 strands-agents
 youtube-search-python
 yt-dlp
-groq==3.0.0
+groq
+requests==3.0.0
